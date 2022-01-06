@@ -1,0 +1,7 @@
+tls:
+    certificates:
+        - certFile: /etc/cert/self-signed.crt
+          keyFile: /etc/cert/self-signed.key
+    options:
+        default:
+            minVersion: VersionTLS12

@@ -1,0 +1,118 @@
+version: '3'
+services:
+    proxy:
+        image: traefik
+        labels:
+            mkcert.services.traefik: ''
+        volumes:
+            - ./traefik.yaml:/etc/traefik/traefik.yaml
+            - ./conf/traefik:/etc/traefik/dynamic
+            - letsencrypt-acme:/letsencrypt
+            - ssl-certs:/etc/cert
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        ports:
+            - 0.0.0.0:80:80
+            - 0.0.0.0:443:443
+            - 0.0.0.0:8080:8080
+        networks:
+            - proxy
+        restart: unless-stopped
+        container_name: proxy
+        healthcheck:
+            test: traefik healthcheck --ping
+        logging:
+            options:
+                max-size: 10m
+    mkcert:
+        image: rogerdz/mkcert
+        volumes:
+            - ssl-certs:/app/certs:rw
+            - ~/.mozilla/firefox:/root/.mozilla/firefox:rw
+            - ~/.pki/nssdb:/root/.pki/nssdb:rw
+            - ~/.local/share/mkcert:/app/ca:rw
+            - ${CA_STORE:-/usr/local/share/ca-certificates}:/usr/local/share/ca-certificates
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - ./conf/traefik:/traefik
+        network_mode: none
+        restart: unless-stopped
+        container_name: mkcert
+        depends_on:
+            - proxy
+        logging:
+            options:
+                max-size: 10m
+    hosts:
+        image: rogerdz/hosts-local
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - /etc/hosts:/hosts
+            - hosts-local:/config
+        network_mode: none
+        init: true
+        restart: unless-stopped
+        container_name: hosts
+        logging:
+            options:
+                max-size: 10m
+    adminer:
+        image: adminer
+        command: php -S 0.0.0.0:8080 -t /var/www/html
+        environment:
+            ADMINER_PLUGINS: tables-filter json-column table-indexes-structure
+        ports:
+          - 0.0.0.0:81:8080
+        networks:
+            - database
+        restart: unless-stopped
+        container_name: adminer
+        logging:
+            options:
+                max-size: 10m
+    maildev:
+        image: dominikserafin/maildev
+        command: --mail-directory /var/maildev/data
+        volumes:
+            - mail-data:/var/maildev/data
+        ports:
+            - 0.0.0.0:82:1080
+        networks:
+            - mail
+            - esnet
+        restart: unless-stopped
+        container_name: maildev
+        logging:
+            options:
+                max-size: 10m
+    # elastichq:
+    #     image: elastichq/elasticsearch-hq
+    #     environment:
+    #         HQ_DEFAULT_URL: http://elasticsearch:9200
+    #     ports:
+    #         - 0.0.0.0:83:5000
+    #     networks:
+    #         - esnet
+    #     init: true
+    #     restart: unless-stopped
+    #     container_name: elastichq
+    #     logging:
+    #         options:
+    #             max-size: 10m
+networks:
+    proxy:
+        driver: bridge
+        name: proxy
+    database:
+        driver: bridge
+        name: database
+    mail:
+        driver: bridge
+        name: mail
+    esnet:
+        driver: bridge
+        name: esnet
+volumes:
+    letsencrypt-acme:
+    hosts-local:
+    ssl-certs:
+        name: ssl-certs
+    mail-data:
